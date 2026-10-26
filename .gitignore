@@ -21,6 +21,10 @@ backend/artifacts/models/*
 backend/artifacts/models/cnn/*
 backend/artifacts/models/cnn_lstm/*
 backend/artifacts/models/cnn_bilstm_attention/*
+!backend/artifacts/model.onnx
+!backend/artifacts/models/cnn/model.onnx
+!backend/artifacts/models/cnn_lstm/model.onnx
+!backend/artifacts/models/cnn_bilstm_attention/model.onnx
 !backend/artifacts/models/cnn/model.pt
 !backend/artifacts/models/cnn/model.json
 !backend/artifacts/models/cnn/evaluation.json

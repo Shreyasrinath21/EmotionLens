@@ -5,14 +5,22 @@ import os
 import re
 import tempfile
 import threading
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import numpy as np
-import torch
 from requests.exceptions import RequestException
-from torch.nn import functional as F
+
+try:
+    import torch
+    from torch.nn import functional as F
+    from .models import create_model
+except ImportError:  # Vercel uses ONNX Runtime to keep the function under its size limit.
+    torch = None
+    F = None
+    create_model = None
 
 from .audio import (
     AudioData,
@@ -22,7 +30,7 @@ from .audio import (
     segment_audio,
     TARGET_SAMPLE_RATE,
 )
-from .models import CLASS_LABELS, CREMA_D_CLASS_LABELS, MODEL_ARCHITECTURES, create_model
+from .model_config import CLASS_LABELS, CREMA_D_CLASS_LABELS, MODEL_ARCHITECTURES
 
 
 ARTIFACTS_DIR = Path(__file__).resolve().parents[1] / "artifacts"
@@ -80,7 +88,7 @@ class InferenceService:
         self.pretrained_model: torch.nn.Module | None = None
         self.pretrained_feature_extractor: Any | None = None
         self.pretrained_load_lock = threading.Lock()
-        self.device = torch.device("cpu")
+        self.device = torch.device("cpu") if torch is not None else None
         self.load_error: str | None = None
         self.load_checkpoint()
 
@@ -93,7 +101,7 @@ class InferenceService:
         self.class_labels = CLASS_LABELS
         self.dataset = None
         self.load_error = None
-        if not CHECKPOINT_PATH.is_file() or not MODEL_INFO_PATH.is_file():
+        if not MODEL_INFO_PATH.is_file() or (torch is not None and not CHECKPOINT_PATH.is_file()):
             return
         try:
             metadata = json.loads(MODEL_INFO_PATH.read_text(encoding="utf-8"))
@@ -102,10 +110,13 @@ class InferenceService:
             supported_label_sets = (CLASS_LABELS, CREMA_D_CLASS_LABELS)
             if class_labels not in supported_label_sets:
                 raise ValueError("Checkpoint class mapping does not match a supported dataset.")
-            model = create_model(architecture, len(class_labels))
-            state = torch.load(CHECKPOINT_PATH, map_location=self.device, weights_only=True)
-            model.load_state_dict(state)
-            model.eval()
+            if torch is None:
+                model = self._open_onnx_session(architecture)
+            else:
+                model = create_model(architecture, len(class_labels))
+                state = torch.load(CHECKPOINT_PATH, map_location=self.device, weights_only=True)
+                model.load_state_dict(state)
+                model.eval()
             threshold = float(metadata["uncertainty_threshold"])
             if not 0 <= threshold <= 1.01:
                 raise ValueError("The checkpoint uncertainty threshold must be in [0, 1.01].")
@@ -122,6 +133,10 @@ class InferenceService:
     @property
     def available(self) -> bool:
         return self.model is not None
+
+    @property
+    def pretrained_available(self) -> bool:
+        return torch is not None
 
     def model_info(self) -> dict[str, Any]:
         metadata: dict[str, Any] = {}
@@ -151,7 +166,8 @@ class InferenceService:
                     "note": "Reported externally; not measured by EmotionLens and not comparable to its RAVDESS results.",
                 },
                 "download_size_bytes": PRETRAINED_MODEL_SIZE_BYTES,
-                "download_on_first_use": True,
+                "download_on_first_use": torch is not None,
+                "available": torch is not None,
                 "local_audio_inference": True,
             },
             "model_version": self.model_version or metadata.get("model_version"),
@@ -160,12 +176,12 @@ class InferenceService:
             else metadata.get("uncertainty_threshold"),
             "note": None
             if self.available
-            else "No local trained checkpoint is installed. The separately labelled pretrained four-class model is available in the selector.",
+            else "No local trained checkpoint is installed. A separately labelled pretrained model may be available on supported runtimes.",
         }
 
     def available_architectures(self) -> list[str]:
         available = [self.architecture] if self.available and self.architecture else []
-        if PRETRAINED_ARCHITECTURE not in available:
+        if torch is not None and PRETRAINED_ARCHITECTURE not in available:
             available.append(PRETRAINED_ARCHITECTURE)
         comparison = self.artifact_report("comparison")
         if comparison.get("status") != "evaluated":
@@ -174,11 +190,24 @@ class InferenceService:
             if architecture not in MODEL_ARCHITECTURES or architecture in available:
                 continue
             model_dir = ARTIFACTS_DIR / "models" / architecture
-            if (model_dir / "model.pt").is_file() and (model_dir / "model.json").is_file():
+            checkpoint = model_dir / ("model.onnx" if torch is None else "model.pt")
+            if checkpoint.is_file() and (model_dir / "model.json").is_file():
                 available.append(architecture)
         return available
 
-    def _load_pretrained_model(self) -> tuple[torch.nn.Module, Any]:
+    def _open_onnx_session(self, architecture: str):
+        try:
+            import onnxruntime as ort
+        except ImportError as exc:
+            raise RuntimeError("The ONNX Runtime dependency is missing.") from exc
+        model_path = ARTIFACTS_DIR / "models" / architecture / "model.onnx"
+        if not model_path.is_file():
+            raise RuntimeError(f"The ONNX model for {architecture} is not available.")
+        return ort.InferenceSession(str(model_path), providers=["CPUExecutionProvider"])
+
+    def _load_pretrained_model(self) -> tuple[Any, Any]:
+        if torch is None:
+            raise RuntimeError("The optional pretrained model is unavailable in the compact Vercel deployment.")
         if self.pretrained_model is not None and self.pretrained_feature_extractor is not None:
             return self.pretrained_model, self.pretrained_feature_extractor
         with self.pretrained_load_lock:
@@ -231,7 +260,7 @@ class InferenceService:
 
     def _resolve_model(
         self, architecture: str | None
-    ) -> tuple[torch.nn.Module, float, str, str, tuple[str, ...], str]:
+    ) -> tuple[Any, float, str, str, tuple[str, ...], str]:
         selected = architecture or self.architecture
         if selected == self.architecture and self.model is not None:
             return (
@@ -258,14 +287,17 @@ class InferenceService:
             raise RuntimeError(f"The saved {selected} model uses an unsupported class mapping.")
         model = self.models.get(selected)
         if model is None:
-            model = create_model(selected, len(class_labels))
-            state = torch.load(
-                model_dir / "model.pt",
-                map_location=self.device,
-                weights_only=True,
-            )
-            model.load_state_dict(state)
-            model.eval()
+            if torch is None:
+                model = self._open_onnx_session(selected)
+            else:
+                model = create_model(selected, len(class_labels))
+                state = torch.load(
+                    model_dir / "model.pt",
+                    map_location=self.device,
+                    weights_only=True,
+                )
+                model.load_state_dict(state)
+                model.eval()
             self.models[selected] = model
         try:
             threshold = float(metadata["uncertainty_threshold"])
@@ -618,12 +650,29 @@ class InferenceService:
             ),
         }
 
+    @staticmethod
+    def _scores_for_log_mel(model: Any, log_mel: np.ndarray) -> np.ndarray:
+        if torch is None:
+            input_name = model.get_inputs()[0].name
+            logits = model.run(
+                None,
+                {input_name: np.asarray(log_mel, dtype=np.float32)[None, None, :, :]},
+            )[0][0]
+            shifted = logits - np.max(logits)
+            probabilities = np.exp(shifted)
+            return probabilities / probabilities.sum()
+        tensor = torch.from_numpy(log_mel).unsqueeze(0).unsqueeze(0)
+        logits = model(tensor)
+        if logits.ndim != 2 or logits.shape[0] != 1:
+            raise RuntimeError("The model returned an invalid class-score shape.")
+        return F.softmax(logits, dim=1)[0].cpu().numpy()
+
     def _predict_audio(
         self,
         audio: AudioData,
         audio_metadata: dict[str, Any],
         include_attribution: bool,
-        model: torch.nn.Module,
+        model: Any,
         threshold: float,
         model_version: str,
         architecture: str,
@@ -633,13 +682,11 @@ class InferenceService:
         segments = segment_audio(audio.samples)
         segment_results: list[dict[str, Any]] = []
         aggregate_scores = np.zeros(len(class_labels), dtype=np.float64)
-        with torch.inference_mode():
+        with torch.inference_mode() if torch is not None else nullcontext():
             for index, (start, end, log_mel) in enumerate(segments):
-                tensor = torch.from_numpy(log_mel).unsqueeze(0).unsqueeze(0)
-                logits = model(tensor)
-                if logits.ndim != 2 or logits.shape != (1, len(class_labels)):
+                scores = self._scores_for_log_mel(model, log_mel)
+                if scores.ndim != 1 or scores.shape != (len(class_labels),):
                     raise RuntimeError("The model returned an invalid class-score shape.")
-                scores = F.softmax(logits, dim=1)[0].cpu().numpy()
                 if not np.isfinite(scores).all():
                     raise RuntimeError("The model returned non-finite class scores.")
                 aggregate_scores += scores
@@ -674,7 +721,10 @@ class InferenceService:
                 "Input gradients indicate model sensitivity, not causal evidence or a person's emotion."
             ),
         }
-        if include_attribution:
+        if include_attribution and torch is None:
+            explainability["status"] = "unavailable"
+            explainability["limitation"] = "Input-gradient maps are unavailable in the compact ONNX deployment."
+        elif include_attribution:
             sensitivity = np.zeros((64, 300), dtype=np.float32)
             with torch.enable_grad():
                 for _, _, log_mel in segments:

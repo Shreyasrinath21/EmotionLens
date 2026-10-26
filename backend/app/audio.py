@@ -3,10 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from io import BytesIO
 
-import librosa
 import numpy as np
 import soundfile as sf
-from scipy.signal import resample_poly, wiener
+import soxr
 
 
 TARGET_SAMPLE_RATE = 16_000
@@ -38,7 +37,15 @@ class AudioData:
 def denoise_wiener(samples: np.ndarray) -> np.ndarray:
     if samples.size < 3:
         return samples.copy()
-    filtered = wiener(samples, mysize=15)
+    window = 15
+    padded = np.pad(samples.astype(np.float64), (window // 2, window // 2), mode="edge")
+    kernel = np.full(window, 1.0 / window, dtype=np.float64)
+    local_mean = np.convolve(padded, kernel, mode="valid")
+    local_square_mean = np.convolve(padded * padded, kernel, mode="valid")
+    local_variance = np.maximum(local_square_mean - local_mean * local_mean, 0.0)
+    noise = float(np.mean(local_variance))
+    gain = np.maximum(local_variance - noise, 0.0) / np.maximum(local_variance, 1e-12)
+    filtered = local_mean + gain * (samples - local_mean)
     filtered = np.nan_to_num(filtered, nan=0.0, posinf=0.0, neginf=0.0)
     peak = float(np.max(np.abs(filtered)))
     if peak <= 1e-8:
@@ -81,11 +88,7 @@ def decode_wav(contents: bytes) -> AudioData:
 
     if sample_rate != TARGET_SAMPLE_RATE:
         divisor = np.gcd(sample_rate, TARGET_SAMPLE_RATE)
-        mono = resample_poly(
-            mono,
-            TARGET_SAMPLE_RATE // divisor,
-            sample_rate // divisor,
-        ).astype(np.float32, copy=False)
+        mono = soxr.resample(mono, sample_rate, TARGET_SAMPLE_RATE).astype(np.float32, copy=False)
 
     peak = float(np.max(np.abs(mono)))
     if peak > 0:
@@ -107,19 +110,121 @@ def _model_features(samples: np.ndarray) -> np.ndarray:
     else:
         samples = samples[:minimum_samples]
 
-    mel = librosa.feature.melspectrogram(
-        y=samples,
-        sr=TARGET_SAMPLE_RATE,
-        n_fft=400,
-        hop_length=160,
-        n_mels=N_MELS,
-        power=2.0,
-    )
-    log_mel = librosa.power_to_db(mel, ref=np.max)
+    mel, _ = _mel_spectrogram(samples, N_MELS)
+    log_mel = _power_to_db(mel)
     log_mel = np.clip(log_mel, -80.0, 0.0).astype(np.float32)
     if log_mel.shape[1] < FEATURE_FRAMES:
         log_mel = np.pad(log_mel, ((0, 0), (0, FEATURE_FRAMES - log_mel.shape[1])))
     return log_mel[:, :FEATURE_FRAMES]
+
+
+def _centered_frames(samples: np.ndarray, frame_length: int, hop_length: int) -> np.ndarray:
+    padded = np.pad(samples, (frame_length // 2, frame_length // 2), mode="constant")
+    frame_count = 1 + max(0, (padded.size - frame_length) // hop_length)
+    shape = (frame_count, frame_length)
+    strides = (padded.strides[0] * hop_length, padded.strides[0])
+    return np.lib.stride_tricks.as_strided(padded, shape=shape, strides=strides, writeable=False)
+
+
+def _stft(samples: np.ndarray, n_fft: int = 400, hop_length: int = 160) -> np.ndarray:
+    frames = _centered_frames(np.asarray(samples, dtype=np.float32), n_fft, hop_length)
+    window = np.hanning(n_fft + 1)[:-1].astype(np.float32)
+    return np.fft.rfft(frames * window[None, :], axis=1).T
+
+
+def _hz_to_mel(frequencies: np.ndarray) -> np.ndarray:
+    frequencies = np.asarray(frequencies, dtype=np.float64)
+    f_sp = 200.0 / 3.0
+    min_log_hz = 1000.0
+    min_log_mel = min_log_hz / f_sp
+    logstep = np.log(6.4) / 27.0
+    mel = frequencies / f_sp
+    log_region = frequencies >= min_log_hz
+    mel[log_region] = min_log_mel + np.log(frequencies[log_region] / min_log_hz) / logstep
+    return mel
+
+
+def _mel_filterbank(n_mels: int, n_fft: int = 400) -> np.ndarray:
+    mel_edges = np.linspace(_hz_to_mel(np.array([0.0]))[0], _hz_to_mel(np.array([8000.0]))[0], n_mels + 2)
+    f_sp = 200.0 / 3.0
+    min_log_hz = 1000.0
+    min_log_mel = min_log_hz / f_sp
+    logstep = np.log(6.4) / 27.0
+    hz_edges = mel_edges * f_sp
+    log_region = mel_edges >= min_log_mel
+    hz_edges[log_region] = min_log_hz * np.exp(logstep * (mel_edges[log_region] - min_log_mel))
+    fft_frequencies = np.linspace(0.0, 8000.0, 1 + n_fft // 2)
+    ramps = hz_edges[:, None] - fft_frequencies[None, :]
+    lower = -ramps[:-2] / np.maximum(hz_edges[1:-1] - hz_edges[:-2], 1e-12)[:, None]
+    upper = ramps[2:] / np.maximum(hz_edges[2:] - hz_edges[1:-1], 1e-12)[:, None]
+    weights = np.maximum(0.0, np.minimum(lower, upper))
+    weights *= (2.0 / np.maximum(hz_edges[2:] - hz_edges[:-2], 1e-12))[:, None]
+    return weights.astype(np.float32)
+
+
+def _mel_spectrogram(samples: np.ndarray, n_mels: int) -> tuple[np.ndarray, np.ndarray]:
+    spectrum = _stft(samples)
+    power = np.square(np.abs(spectrum), dtype=np.float32)
+    filters = _mel_filterbank(n_mels)
+    return filters @ power, spectrum
+
+
+def _power_to_db(power: np.ndarray) -> np.ndarray:
+    decibels = 10.0 * np.log10(np.maximum(power, 1e-10))
+    return np.maximum(decibels - float(np.max(decibels, initial=-80.0)), -80.0)
+
+
+def _rms(samples: np.ndarray, frame_length: int = 400, hop_length: int = 160) -> np.ndarray:
+    frames = _centered_frames(np.asarray(samples, dtype=np.float32), frame_length, hop_length)
+    return np.sqrt(np.mean(np.square(frames, dtype=np.float64), axis=1))
+
+
+def _mfcc(samples: np.ndarray, n_mfcc: int = N_MFCC) -> np.ndarray:
+    mel, _ = _mel_spectrogram(samples, 128)
+    log_mel = _power_to_db(mel).astype(np.float64)
+    n_mels = log_mel.shape[0]
+    basis = np.cos(np.pi / n_mels * (np.arange(n_mels)[:, None] + 0.5) * np.arange(n_mfcc)[None, :])
+    basis[:, 0] *= np.sqrt(1.0 / n_mels)
+    if n_mfcc > 1:
+        basis[:, 1:] *= np.sqrt(2.0 / n_mels)
+    return basis.T @ log_mel
+
+
+def _spectral_centroid(samples: np.ndarray) -> np.ndarray:
+    magnitude = np.abs(_stft(samples))
+    frequencies = np.linspace(0.0, TARGET_SAMPLE_RATE / 2, magnitude.shape[0])[:, None]
+    return np.sum(frequencies * magnitude, axis=0) / np.maximum(np.sum(magnitude, axis=0), 1e-10)
+
+
+def _zero_crossing_rate(samples: np.ndarray, frame_length: int = 400, hop_length: int = 160) -> np.ndarray:
+    frames = _centered_frames(np.asarray(samples, dtype=np.float32), frame_length, hop_length)
+    signs = np.signbit(frames)
+    return np.mean(signs[:, 1:] != signs[:, :-1], axis=1)
+
+
+def _estimate_pitch(samples: np.ndarray) -> float | None:
+    frame_length = 1024
+    frames = _centered_frames(np.asarray(samples, dtype=np.float32), frame_length, 160)
+    pitches: list[float] = []
+    min_lag = int(TARGET_SAMPLE_RATE / 400)
+    max_lag = min(int(TARGET_SAMPLE_RATE / 70), frame_length - 1)
+    for frame in frames:
+        frame = frame.astype(np.float64)
+        frame -= frame.mean()
+        spectrum = np.fft.rfft(frame, n=frame_length * 2)
+        corr = np.fft.irfft(spectrum * np.conjugate(spectrum), n=frame_length * 2)[:frame_length]
+        if corr[0] <= 1e-10:
+            continue
+        difference = np.maximum(2.0 * (corr[0] - corr), 1e-12)
+        cumulative = np.cumsum(difference[1 : max_lag + 1])
+        normalized = difference[1 : max_lag + 1] * np.arange(1, max_lag + 1) / np.maximum(cumulative, 1e-12)
+        region = normalized[min_lag - 1 : max_lag]
+        if region.size == 0:
+            continue
+        lag = int(np.argmin(region)) + min_lag
+        if normalized[lag - 1] < 0.35:
+            pitches.append(TARGET_SAMPLE_RATE / lag)
+    return float(np.median(pitches)) if pitches else None
 
 
 def detect_voice_activity(samples: np.ndarray) -> dict[str, object]:
@@ -184,45 +289,17 @@ def extract_features(samples: np.ndarray) -> dict[str, object]:
 
     n_fft = 400
     hop_length = 160
-    mel = librosa.feature.melspectrogram(
-        y=samples,
-        sr=TARGET_SAMPLE_RATE,
-        n_fft=n_fft,
-        hop_length=hop_length,
-        n_mels=N_MELS,
-        power=2.0,
-    )
-    log_mel = np.clip(librosa.power_to_db(mel, ref=np.max), -80.0, 0.0)
-    mfcc = librosa.feature.mfcc(
-        y=samples,
-        sr=TARGET_SAMPLE_RATE,
-        n_mfcc=N_MFCC,
-        n_fft=n_fft,
-        hop_length=hop_length,
-    )
-    rms = librosa.feature.rms(y=samples, frame_length=n_fft, hop_length=hop_length)[0]
-    centroid = librosa.feature.spectral_centroid(
-        y=samples, sr=TARGET_SAMPLE_RATE, n_fft=n_fft, hop_length=hop_length
-    )[0]
-    zcr = librosa.feature.zero_crossing_rate(
-        y=samples, frame_length=n_fft, hop_length=hop_length
-    )[0]
-    try:
-        pitches = librosa.yin(
-            samples,
-            fmin=70,
-            fmax=400,
-            sr=TARGET_SAMPLE_RATE,
-            frame_length=1024,
-            hop_length=hop_length,
-        )
-        pitch_hz = float(np.median(pitches)) if pitches.size else None
-    except (ValueError, FloatingPointError):
-        pitch_hz = None
+    mel, _ = _mel_spectrogram(samples, N_MELS)
+    log_mel = np.clip(_power_to_db(mel), -80.0, 0.0)
+    mfcc = _mfcc(samples)
+    rms = _rms(samples, n_fft, hop_length)
+    centroid = _spectral_centroid(samples)
+    zcr = _zero_crossing_rate(samples, n_fft, hop_length)
+    pitch_hz = _estimate_pitch(samples)
 
     waveform = samples[:: max(1, int(np.ceil(samples.size / 1200)))]
     duration = samples.size / TARGET_SAMPLE_RATE
-    envelope = librosa.feature.rms(y=samples, frame_length=n_fft, hop_length=hop_length)[0]
+    envelope = rms
 
     def finite_mean(values: np.ndarray) -> float | None:
         valid = values[np.isfinite(values)]

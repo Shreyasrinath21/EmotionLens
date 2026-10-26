@@ -3,5 +3,7 @@
 .venv
 backend/.venv
 backend/artifacts/pretrained_cache/**
+backend/artifacts/**/*.pt
+backend/scripts/**
 backend/tests/**
 .pytest_cache/**

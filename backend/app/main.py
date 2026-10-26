@@ -25,7 +25,7 @@ def health() -> dict[str, object]:
     return {
         "status": "ok",
         "model_available": service.available,
-        "pretrained_model_available": True,
+        "pretrained_model_available": service.pretrained_available,
         "pretrained_model_loaded": service.pretrained_model is not None,
     }
 
@@ -64,7 +64,13 @@ def dataset_audit() -> dict[str, object]:
 def model_card() -> dict[str, object]:
     info = service.model_info()
     return {
-        "status": "available" if info["available"] else "pretrained_available",
+        "status": (
+            "available"
+            if info["available"]
+            else "pretrained_available"
+            if service.pretrained_available
+            else "unavailable"
+        ),
         "model_version": info.get("model_version"),
         "architecture": info.get("architecture"),
         "dataset": info.get("dataset"),
@@ -86,7 +92,7 @@ def capabilities() -> dict[str, object]:
     return {
         "local_audio_features": True,
         "emotion_prediction": service.available or PRETRAINED_ARCHITECTURE in service.available_architectures(),
-        "pretrained_emotion_classifier": True,
+        "pretrained_emotion_classifier": service.pretrained_available,
         "energy_activity_estimate": True,
         "speaker_reference": True,
         "json_export": True,
@@ -100,7 +106,7 @@ def capabilities() -> dict[str, object]:
         "cross_corpus": service.artifact_report("cross_corpus").get("status") == "evaluated",
         "multilingual": False,
         "multimodal": False,
-        "pretrained_audio_embeddings": True,
+        "pretrained_audio_embeddings": service.pretrained_available,
         "speaker_adaptation_evaluated": False,
         "raw_audio_retained": False,
     }
