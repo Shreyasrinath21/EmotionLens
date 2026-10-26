@@ -1,0 +1,74 @@
+{
+  "status": "evaluated",
+  "seed": 42,
+  "split": "speaker-independent held-out test speakers",
+  "class_labels": [
+    "neutral",
+    "calm",
+    "happy",
+    "sad",
+    "angry",
+    "fearful",
+    "disgust",
+    "surprised"
+  ],
+  "conditions": {
+    "clean": {
+      "condition": "clean",
+      "snr_db": null,
+      "denoising": "none",
+      "sample_count": 240,
+      "accuracy": 0.375,
+      "macro_precision": 0.5075968693665271,
+      "macro_recall": 0.3515625,
+      "macro_f1": 0.30136089242725994,
+      "mean_raw_softmax_score": 0.36130416076630356
+    },
+    "white_noise_20db": {
+      "condition": "white_noise_20db",
+      "snr_db": 20,
+      "denoising": "none",
+      "sample_count": 240,
+      "accuracy": 0.13333333333333333,
+      "macro_precision": 0.016666666666666666,
+      "macro_recall": 0.125,
+      "macro_f1": 0.029411764705882353,
+      "mean_raw_softmax_score": 0.8788299180567265
+    },
+    "white_noise_10db": {
+      "condition": "white_noise_10db",
+      "snr_db": 10,
+      "denoising": "none",
+      "sample_count": 240,
+      "accuracy": 0.13333333333333333,
+      "macro_precision": 0.016877637130801686,
+      "macro_recall": 0.125,
+      "macro_f1": 0.02973977695167286,
+      "mean_raw_softmax_score": 0.8000434271991252
+    },
+    "white_noise_0db": {
+      "condition": "white_noise_0db",
+      "snr_db": 0,
+      "denoising": "none",
+      "sample_count": 240,
+      "accuracy": 0.13333333333333333,
+      "macro_precision": 0.017391304347826087,
+      "macro_recall": 0.125,
+      "macro_f1": 0.030534351145038167,
+      "mean_raw_softmax_score": 0.6295972945789496
+    },
+    "white_noise_10db_wiener": {
+      "condition": "white_noise_10db_wiener",
+      "snr_db": 10,
+      "denoising": "scipy.signal.wiener",
+      "sample_count": 240,
+      "accuracy": 0.17916666666666667,
+      "macro_precision": 0.16563058368076236,
+      "macro_recall": 0.16796875,
+      "macro_f1": 0.07901813316845405,
+      "mean_raw_softmax_score": 0.5180733188986778,
+      "caveat": "A simple Wiener filter baseline; effectiveness depends on audio and is not guaranteed."
+    }
+  },
+  "note": "Synthetic noise is added to copies of held-out test audio; original recordings are unchanged."
+}

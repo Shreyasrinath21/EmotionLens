@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#101536" />
+    <title>EmotionLens — Voice Emotion Recognition</title>
+    <link rel="stylesheet" href="/static/styles.css?v=dashboard-graphs-navigation-2" />
+  </head>
+  <body>
+    <header class="hero">
+      <nav class="topbar" aria-label="Main navigation">
+        <a class="brand" href="/" aria-label="EmotionLens home"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false"><path d="M5 17h3l2.2-6 4.1 12 3.8-16 4.1 13 2.1-6H27" /></svg></span><span class="brand-name">Emotion<span>Lens</span></span></a>
+        <span class="local-badge"><span class="status-dot"></span> In-memory processing</span>
+      </nav>
+      <div class="hero-copy">
+        <p class="eyebrow">DEEP LEARNING · VOICE ANALYSIS</p>
+        <h1>Hear the signal.<br /><span>Explore the patterns.</span></h1>
+        <p class="hero-subtitle">A research workspace for exploring vocal emotion estimates — with privacy and uncertainty in view.</p>
+      </div>
+      <div class="hero-glow" aria-hidden="true"></div>
+    </header>
+
+    <main class="page-shell">
+      <div class="workspace-nav">
+        <nav class="primary-nav" aria-label="Workspace pages">
+          <button id="nav-analyze" class="primary-nav-link active" type="button" aria-current="page">Analyze</button>
+          <button id="nav-results" class="primary-nav-link" type="button" disabled>Results</button>
+          <button id="nav-evaluation" class="primary-nav-link" type="button">Evaluation</button>
+        </nav>
+      </div>
+      <section id="input-card" class="input-card card" aria-labelledby="input-heading">
+        <div class="section-heading">
+          <div><p class="eyebrow purple">AUDIO INPUT</p><h2 id="input-heading">Start with a recording</h2></div>
+          <label class="model-select" for="model-select">MODEL <select id="model-select" aria-label="Select model architecture"><option value="">Checking…</option></select></label>
+        </div>
+        <label id="drop-zone" class="drop-zone" for="audio-file">
+          <span class="upload-icon" aria-hidden="true">↑</span>
+          <strong>Drop a WAV file here</strong>
+          <span>or choose a file from your device · WAV, up to 10 MB and 30 seconds</span>
+          <input id="audio-file" type="file" accept=".wav,audio/wav" />
+        </label>
+        <div class="input-actions">
+          <button id="record-button" class="button button-secondary" type="button">Record audio</button>
+          <button id="analyse-button" class="button button-primary" type="button" disabled>Analyse audio <span aria-hidden="true">→</span></button>
+        </div>
+        <p id="privacy-note" class="privacy-note">When you analyse a recording, it is sent to this app's server and processed in memory; the app does not retain the audio. In a hosted deployment, use only recordings you have permission to share. The optional SUPERB model downloads about 757 MB of model files on first use.</p>
+        <p class="privacy-note">Input-gradient maps are generated for local CNN checkpoints; the pretrained wav2vec2 model does not provide this sensitivity view.</p>
+        <p id="input-message" class="message" role="status" aria-live="polite"></p>
+        <div id="selected-audio" class="selected-audio" hidden>
+          <div class="file-summary"><span class="file-icon">♫</span><div><strong id="file-name"></strong><span id="file-meta"></span></div><button id="remove-audio" class="icon-button" type="button" aria-label="Remove selected audio">×</button></div>
+          <audio id="audio-player" controls></audio>
+          <label class="consent-label"><input id="consent" type="checkbox" /> I confirm I have permission to analyse this recording.</label>
+          <label class="consent-label"><input id="denoise-audio" type="checkbox" /> Apply experimental Wiener denoising <span class="muted">May remove emotion-relevant audio cues; off by default.</span></label>
+        </div>
+      </section>
+
+      <section class="readiness card" id="readiness-card" aria-live="polite">
+        <div class="readiness-icon">i</div><div><strong id="readiness-title">Checking model readiness</strong><p id="readiness-text">This workspace never substitutes demo scores for model predictions.</p><details id="model-setup" hidden><summary>Training details</summary><p>The SUPERB model is available separately in the model selector. Its English IEMOCAP-derived head has four classes only (neutral, happy, angry, sad), downloads about 757 MB on first use, and has no EmotionLens validation or calibrated rejection threshold. Its model card says Apache-2.0; IEMOCAP source-data terms still apply.</p><p>To train the local eight-class RAVDESS model, obtain the speech dataset, extract it to <code>datasets\RAVDESS</code>, then open PowerShell in the project’s <code>backend</code> folder and run:</p><pre><code>python -m app.training --dataset ..\datasets\RAVDESS --architecture cnn_lstm --epochs 20 --batch-size 16 --seed 42 --compare --robustness</code></pre><p>After training completes, restart the app. Until then, audio features can still be inspected, and the separate pretrained model can be selected.</p></details></div>
+      </section>
+
+      <section id="results" hidden>
+        <nav class="tabs" aria-label="Analysis sections" role="tablist">
+          <button class="tab active" data-tab="overview" role="tab" aria-selected="true">Overview</button>
+          <button class="tab" data-tab="audio-analysis" role="tab" aria-selected="false">Audio analysis</button>
+          <button class="tab" data-tab="timeline" role="tab" aria-selected="false">Emotion timeline</button>
+          <button class="tab" data-tab="reliability" role="tab" aria-selected="false">Reliability</button>
+          <button class="tab" data-tab="speaker-reference" role="tab" aria-selected="false">Speaker reference</button>
+          <button class="tab" data-tab="evaluation" role="tab" aria-selected="false">Evaluation &amp; models</button>
+        </nav>
+        <div id="tab-overview" class="tab-panel">
+          <article class="card recording-result-context"><p class="eyebrow purple">RESULT FOR THIS AUDIO</p><h2 id="recording-result-name">No audio analysed</h2><p id="recording-result-note">Upload a recording and analyse it to see its individual acoustic measurements and supported model scores.</p></article>
+          <article id="prediction-unavailable" class="card prediction-unavailable" hidden><strong>No supported emotion prediction is available.</strong><p id="prediction-unavailable-text">This analysis contains measurements of the uploaded audio only. It does not infer an emotion.</p><button id="show-model-setup" class="button button-secondary" type="button">View training details</button></article>
+          <div class="metrics-grid">
+            <article class="metric-card card"><span class="metric-label">DOMINANT ESTIMATE</span><strong id="dominant-emotion" class="metric-value">—</strong><small id="estimate-note">Model output, not a fact about the speaker</small></article>
+            <article class="metric-card card"><span class="metric-label">TOP RAW SCORE</span><strong id="top-score" class="metric-value">—</strong><small>Softmax score; not calibrated</small></article>
+            <article class="metric-card card"><span class="metric-label">DURATION</span><strong id="duration" class="metric-value">—</strong><small id="sample-details">—</small></article>
+          </div>
+          <article class="card results-card"><div class="section-heading"><div><p class="eyebrow purple">THIS RECORDING · CLASS SCORES</p><h2>Per-recording model scores</h2></div><span class="mini-label">RAW SCORES</span></div><div id="score-bars" class="score-bars"></div></article>
+        </div>
+        <div id="tab-audio-analysis" class="tab-panel" hidden>
+          <article class="card chart-card"><div class="section-heading"><div><p class="eyebrow purple">ACOUSTIC OBSERVATIONS</p><h2>Waveform</h2></div><span class="mini-label">NORMALIZED AMPLITUDE</span></div><canvas id="waveform" height="180" aria-label="Waveform with time in seconds on the horizontal axis and normalized amplitude on the vertical axis"></canvas></article>
+          <div class="visual-grid">
+            <article class="card chart-card"><h2>Log-Mel spectrogram</h2><canvas id="mel-chart" height="240" aria-label="Log-Mel spectrogram with time in seconds horizontally and Mel-frequency bin vertically"></canvas><small>Time (seconds) × Mel-frequency bin. Color represents relative log energy; this is an acoustic view, not proof of emotion.</small></article>
+            <article class="card chart-card"><h2>MFCC features</h2><canvas id="mfcc-chart" height="200" aria-label="Mean MFCC line chart with coefficient index horizontally and mean coefficient value vertically"></canvas><small>Coefficient index × mean coefficient value, calculated from this audio.</small></article>
+          </div>
+          <article class="card results-card"><div class="section-heading"><div><p class="eyebrow purple">SUMMARY FEATURES</p><h2>Acoustic descriptors</h2></div></div><div id="feature-grid" class="feature-grid"></div><p class="muted">Energy-active audio is a rough silence/activity estimate; it does not distinguish speech from background noise.</p></article>
+          <article class="card chart-card" id="attribution-card"><div class="section-heading"><div><p class="eyebrow purple">MODEL SENSITIVITY</p><h2>Input-gradient map</h2></div><span id="attribution-status" class="mini-label">AUTOMATIC</span></div><canvas id="attribution-chart" height="220" aria-label="Input-gradient sensitivity map with time in seconds horizontally and Mel-frequency bin vertically"></canvas><small id="attribution-note">Generated automatically for supported local checkpoints. Sensitivity is not causal evidence or proof of emotion.</small></article>
+        </div>
+        <div id="tab-timeline" class="tab-panel" hidden>
+          <article class="card results-card"><div class="section-heading"><div><p class="eyebrow purple">SEGMENT-LEVEL ESTIMATES</p><h2>Emotion timeline</h2><p class="muted">Three-second windows, two-second hop. Recording-level labels are not frame-level ground truth. The track shows raw candidate classes; dashed segments are rejected only when a validation threshold exists.</p></div></div><div class="timeline-chart-wrap"><canvas id="emotion-track" aria-label="Raw candidate emotion labels over audio time"></canvas><small>Each bar is a three-second segment; dashed outlines indicate uncertain predictions.</small></div><div class="timeline-chart-wrap"><canvas id="confidence-trend" aria-label="Top raw class score per segment with the rejection threshold"></canvas><small>Raw softmax scores are not calibrated probabilities. A dashed line appears only for models with a validation rejection threshold.</small></div><div id="timeline-list" class="timeline-list"></div></article>
+        </div>
+        <div id="tab-reliability" class="tab-panel" hidden>
+          <article class="card results-card"><p class="eyebrow purple">MODEL LIMITATIONS</p><h2>Reliability &amp; context</h2><div id="reliability-content" class="reliability-copy"></div></article>
+          <article class="card results-card suggestion-card"><p class="eyebrow purple">OPTIONAL COMMUNICATION PROMPT</p><h2>Response suggestion</h2><textarea id="suggestion-text" class="suggestion-editor" aria-label="Review or edit the optional response suggestion" disabled>Suggestions are disabled for uncertain predictions.</textarea><small>Optional template based on a model estimate. You can review or edit it. Pay attention to what the person actually says.</small></article>
+          <div class="export-actions"><button id="export-json" class="button button-secondary">Export JSON</button><button id="export-csv" class="button button-secondary">Export segment CSV</button></div>
+        </div>
+        <div id="tab-speaker-reference" class="tab-panel" hidden>
+          <article class="card results-card">
+            <p class="eyebrow purple">OPTIONAL PERSONAL BASELINE</p><h2>Compare acoustic features with a reference</h2>
+            <p class="muted">Choose a separate, consented recording from the same speaker. The reference is analysed in memory, never saved, and cleared when you reset it or close this page. This comparison is not proof of emotion or identity.</p>
+            <label class="drop-zone reference-drop" for="reference-file"><strong>Select reference WAV</strong><span>WAV only · up to 10 MB · 30 seconds</span><input id="reference-file" type="file" accept=".wav,audio/wav" /></label>
+            <label class="consent-label reference-consent"><input id="reference-consent" type="checkbox" /> I have permission to use this separate recording as an optional speaker baseline.</label>
+            <div class="export-actions"><button id="compare-reference" class="button button-primary" type="button" disabled>Analyze &amp; compare</button><button id="reset-reference" class="button button-secondary" type="button" disabled>Delete reference data</button></div>
+            <p id="reference-message" class="message" role="status" aria-live="polite"></p>
+            <div id="reference-results" class="reference-results" hidden><h3>Relative acoustic changes</h3><div id="reference-deltas" class="feature-grid"></div><small>Values compare measurements from the current clip and reference. They are not emotion classifications.</small></div>
+          </article>
+        </div>
+        <div id="tab-evaluation" class="tab-panel" hidden>
+          <article class="card results-card"><div class="evaluation-heading"><div><p class="eyebrow purple">FIXED HELD-OUT TEST SET</p><h2>Model-level evaluation</h2></div><button id="print-report" class="button button-secondary" type="button">Print / Save as PDF</button></div><p class="evaluation-scope">These benchmark scores summarize a fixed set of held-out recordings for the trained model. They do not change when you upload a different audio file. For this recording’s individual result, use Overview.</p><div id="evaluation-detail" class="evaluation-copy"><strong>Not evaluated</strong><p>Run the training command to generate metrics from held-out speakers. No scores are fabricated.</p></div></article>
+          <article class="card results-card"><p class="eyebrow purple">FAIR MODEL COMPARISON</p><h2>CNN vs CNN–LSTM vs CNN–BiLSTM + attention</h2><div id="comparison-detail" class="evaluation-copy"><strong>Not evaluated</strong><p>Use the training command with <code>--compare</code> to train all three models on identical speaker splits. This is a compute-intensive experiment.</p></div></article>
+          <article class="card results-card"><p class="eyebrow purple">NOISE ROBUSTNESS</p><h2>Controlled corruption experiment</h2><div id="robustness-detail" class="evaluation-copy"><strong>Not evaluated</strong><p>Use the training command with <code>--robustness</code> to measure clean, 20/10/0 dB, and Wiener-denoised held-out audio.</p></div><canvas id="robustness-chart" hidden aria-label="Held-out macro F1 under measured noise and denoising conditions"></canvas><small id="robustness-chart-note" class="muted" hidden>Measured held-out macro F1 by condition; Wiener filtering is an experimental ablation, not a guaranteed improvement.</small></article>
+          <article class="card results-card"><p class="eyebrow purple">EXTERNAL CORPUS TRANSFER</p><h2>Cross-corpus evaluation</h2><div id="cross-corpus-detail" class="evaluation-copy"><strong>Not evaluated</strong><p>Requires a separately obtained, permitted target corpus. Run <code>python -m app.cross_corpus --dataset ..\datasets\CREMA-D --dataset-format crema-d</code> from the backend after training a source model.</p></div></article>
+          <article class="card results-card"><p class="eyebrow purple">DATA QUALITY</p><h2>Dataset audit</h2><div id="dataset-audit-detail" class="evaluation-copy"><strong>Not audited</strong><p>Run <code>python -m app.training --dataset ..\datasets\RAVDESS --dataset-format ravdess --audit-dataset</code> to save local file-integrity, label, speaker, duration, sample-rate, channel, and split audit statistics.</p></div></article>
+          <article class="card results-card"><p class="eyebrow purple">MODEL CARD &amp; LIMITATIONS</p><h2>Intended use and provenance</h2><div id="model-card-detail" class="evaluation-copy"><p>Loading model card…</p></div></article>
+          <article class="card results-card"><p class="eyebrow purple">RESEARCH EXTENSIONS</p><h2>Implemented comparisons and data-dependent work</h2><div class="extension-grid"><div class="extension-item"><strong>CNN–BiLSTM with temporal attention</strong><p>Implemented as a trainable model option; compare with CNN and CNN–LSTM using identical speaker splits.</p></div><div class="extension-item"><strong>Multilingual evaluation</strong><p>Not yet supported: currently implemented datasets are acted English speech. Language-specific corpora and validation are needed.</p></div><div class="extension-item"><strong>Multimodal fusion</strong><p>Not enabled; suitable consented, aligned speech/video/text data and an independent evaluation are not available.</p></div><div class="extension-item"><strong>Pretrained audio embeddings and calibrated probabilities</strong><p>Not enabled or evaluated; model licensing, compute, and calibration evidence are required.</p></div><div class="extension-item"><strong>Speaker-reference adaptation</strong><p>Reference feature deltas are available; no evidence currently shows improved emotion classification from adaptation.</p></div></div></article>
+        </div>
+      </section>
+
+      <section class="evaluation-section">
+        <div class="evaluation-heading"><div><p class="eyebrow purple">FIXED HELD-OUT TEST SET</p><h2>Model benchmark</h2></div><span class="mini-label">NO PLACEHOLDER METRICS</span></div>
+        <article id="evaluation-card" class="card evaluation-card"><span class="evaluation-empty-icon">⌁</span><div><strong>Not evaluated</strong><p>Train a model with the documented speaker-independent protocol to produce actual test metrics.</p><button id="open-evaluation" class="button button-secondary" type="button">Open evaluation &amp; experiments</button></div></article>
+      </section>
+
+      <section class="notice card"><span aria-hidden="true">⚑</span><div><strong>Research tool, not a decision system</strong><p>Voice emotion estimates can be wrong and may vary with acting style, language, accent, recording conditions, and speaker. Do not use for hiring, discipline, surveillance, diagnosis, or other high-stakes decisions.</p></div></section>
+    </main>
+    <footer><span class="brand"><span class="brand-mark">E</span>EmotionLens</span><span>School of Computer Science &amp; Engineering · RV University</span><span>Deep Learning-Based Voice Emotion Recognition</span></footer>
+    <script src="/static/app.js?v=dashboard-graphs-navigation-2" defer></script>
+  </body>
+</html>

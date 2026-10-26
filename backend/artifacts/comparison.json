@@ -1,0 +1,37 @@
+{
+  "status": "evaluated",
+  "dataset": "RAVDESS",
+  "split_method": "identical speaker-independent split",
+  "random_seed": 42,
+  "selected_primary_model": "cnn_lstm",
+  "models": {
+    "cnn": {
+      "model_version": "cnn-ravdess-20261022T121953Z",
+      "accuracy": 0.375,
+      "macro_precision": 0.5075968693665271,
+      "macro_recall": 0.3515625,
+      "macro_f1": 0.30136089242725994,
+      "test_sample_count": 240,
+      "test_preprocessing_and_inference_latency_ms_per_clip": 12.091227499998544
+    },
+    "cnn_lstm": {
+      "model_version": "cnn_lstm-ravdess-20261022T122305Z",
+      "accuracy": 0.4166666666666667,
+      "macro_precision": 0.40832008580356927,
+      "macro_recall": 0.39453125,
+      "macro_f1": 0.3751150692642774,
+      "test_sample_count": 240,
+      "test_preprocessing_and_inference_latency_ms_per_clip": 10.821203333337811
+    },
+    "cnn_bilstm_attention": {
+      "model_version": "cnn_bilstm_attention-ravdess-20261022T134949Z",
+      "accuracy": 0.42083333333333334,
+      "macro_precision": 0.3512982196467104,
+      "macro_recall": 0.39453125,
+      "macro_f1": 0.3447311582936018,
+      "test_sample_count": 240,
+      "test_preprocessing_and_inference_latency_ms_per_clip": 10.490320833317432
+    }
+  },
+  "note": "All three models were trained separately with the same seed, dataset version, speaker-disjoint train/validation/test IDs, epoch budget, and batch size."
+}

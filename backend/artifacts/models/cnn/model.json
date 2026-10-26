@@ -1,0 +1,184 @@
+{
+  "model_version": "cnn-ravdess-20261022T121953Z",
+  "checkpoint_file": "model.pt",
+  "architecture": "cnn",
+  "class_labels": [
+    "neutral",
+    "calm",
+    "happy",
+    "sad",
+    "angry",
+    "fearful",
+    "disgust",
+    "surprised"
+  ],
+  "uncertainty_threshold": 0.65,
+  "threshold_selection": "Maximum validation coverage with at least 75% selective accuracy; validation only.",
+  "dataset": "RAVDESS",
+  "dataset_version": "RAVDESS speech 1.0",
+  "dataset_source": "Local RAVDESS dataset in Downloads; original download source not recorded",
+  "dataset_file_count": 1440,
+  "dataset_audit": {
+    "speaker_count": 24,
+    "class_counts": {
+      "neutral": 96,
+      "calm": 192,
+      "happy": 192,
+      "sad": 192,
+      "angry": 192,
+      "fearful": 192,
+      "disgust": 192,
+      "surprised": 192
+    },
+    "split_class_counts": {
+      "train": {
+        "neutral": 64,
+        "calm": 128,
+        "happy": 128,
+        "sad": 128,
+        "angry": 128,
+        "fearful": 128,
+        "disgust": 128,
+        "surprised": 128
+      },
+      "validation": {
+        "neutral": 16,
+        "calm": 32,
+        "happy": 32,
+        "sad": 32,
+        "angry": 32,
+        "fearful": 32,
+        "disgust": 32,
+        "surprised": 32
+      },
+      "test": {
+        "neutral": 16,
+        "calm": 32,
+        "happy": 32,
+        "sad": 32,
+        "angry": 32,
+        "fearful": 32,
+        "disgust": 32,
+        "surprised": 32
+      }
+    }
+  },
+  "experiment_timestamp_utc": "2026-10-22T12:19:53.613880+00:00",
+  "random_seed": 42,
+  "split_speakers": {
+    "train": [
+      "01",
+      "02",
+      "03",
+      "04",
+      "05",
+      "07",
+      "08",
+      "09",
+      "10",
+      "13",
+      "15",
+      "17",
+      "20",
+      "21",
+      "22",
+      "23"
+    ],
+    "validation": [
+      "11",
+      "12",
+      "14",
+      "18"
+    ],
+    "test": [
+      "06",
+      "16",
+      "19",
+      "24"
+    ]
+  },
+  "split_sizes": {
+    "train": 960,
+    "validation": 240,
+    "test": 240
+  },
+  "preprocessing": {
+    "sample_rate_hz": 16000,
+    "mono": true,
+    "peak_normalization": true,
+    "feature": "64-band log-Mel spectrogram",
+    "window_seconds": 3,
+    "hop_seconds": 2
+  },
+  "training": {
+    "optimizer": "AdamW",
+    "learning_rate": 0.001,
+    "weight_decay": 0.0001,
+    "early_stopping_patience": 5,
+    "epochs_completed": 10,
+    "batch_size": 32,
+    "best_validation_loss": 1.6256369431813558,
+    "history": [
+      {
+        "epoch": 1,
+        "train_loss": 2.0165240009625753,
+        "validation_loss": 2.031833267211914
+      },
+      {
+        "epoch": 2,
+        "train_loss": 1.9241213123003642,
+        "validation_loss": 1.9950690428415934
+      },
+      {
+        "epoch": 3,
+        "train_loss": 1.8622877915700278,
+        "validation_loss": 1.9503070831298828
+      },
+      {
+        "epoch": 4,
+        "train_loss": 1.809885064760844,
+        "validation_loss": 1.7693710565567016
+      },
+      {
+        "epoch": 5,
+        "train_loss": 1.7767699162165325,
+        "validation_loss": 1.7505262692769368
+      },
+      {
+        "epoch": 6,
+        "train_loss": 1.7282415866851806,
+        "validation_loss": 2.0334027369817096
+      },
+      {
+        "epoch": 7,
+        "train_loss": 1.7010627269744873,
+        "validation_loss": 1.7130298614501953
+      },
+      {
+        "epoch": 8,
+        "train_loss": 1.6734078168869018,
+        "validation_loss": 2.368215783437093
+      },
+      {
+        "epoch": 9,
+        "train_loss": 1.6412980039914449,
+        "validation_loss": 2.8730862220128377
+      },
+      {
+        "epoch": 10,
+        "train_loss": 1.6414671699206034,
+        "validation_loss": 1.6256369431813558
+      }
+    ],
+    "torch_version": "2.14.1+cpu",
+    "python_version": "3.13.15",
+    "numpy_version": "2.5.3",
+    "librosa_version": "0.11.0",
+    "scikit_learn_version": "1.9.1"
+  },
+  "limitations": [
+    "RAVDESS consists of acted English speech and is not representative of all speakers or contexts.",
+    "Softmax outputs have not been calibrated.",
+    "Predictions are not evidence of a person's internal emotional state."
+  ]
+}
