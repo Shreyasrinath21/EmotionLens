@@ -2,6 +2,8 @@
 .vercel
 .venv
 backend/.venv
+.npm-cache
+.uv-cache
 backend/artifacts/pretrained_cache/**
 backend/artifacts/**/*.pt
 backend/scripts/**

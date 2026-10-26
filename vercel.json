@@ -1,19 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "services": {
-    "emotionlens": {
-      "root": ".",
-      "entrypoint": "backend.app.main:app",
-      "framework": "fastapi",
-      "installCommand": "pip install -r vercel-requirements.txt"
+  "functions": {
+    "backend/app/main.py": {
+      "excludeFiles": "{backend/artifacts/pretrained_cache/**,backend/artifacts/**/*.pt,backend/scripts/**,backend/tests/**,datasets/**,reports/**}"
     }
-  },
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": {
-        "service": "emotionlens"
-      }
-    }
-  ]
+  }
 }
