@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import tempfile
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -189,7 +191,11 @@ class InferenceService:
                     "The pretrained model dependency is missing. Install backend requirements and restart."
                 ) from exc
 
-            cache_dir = ARTIFACTS_DIR / "pretrained_cache"
+            cache_dir = (
+                Path(tempfile.gettempdir()) / "emotionlens-pretrained-cache"
+                if os.environ.get("VERCEL")
+                else ARTIFACTS_DIR / "pretrained_cache"
+            )
             try:
                 feature_extractor = AutoFeatureExtractor.from_pretrained(
                     PRETRAINED_MODEL_ID,

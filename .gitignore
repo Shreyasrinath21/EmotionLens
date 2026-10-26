@@ -35,3 +35,4 @@ backend/artifacts/models/cnn_bilstm_attention/*
 datasets/
 reports/
 .DS_Store
+.vercel

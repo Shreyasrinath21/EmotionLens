@@ -1,0 +1,7 @@
+.git
+.vercel
+.venv
+backend/.venv
+backend/artifacts/pretrained_cache/**
+backend/tests/**
+.pytest_cache/**
