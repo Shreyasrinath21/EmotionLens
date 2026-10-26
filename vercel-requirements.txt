@@ -1,0 +1,7 @@
+fastapi==0.159.1
+python-multipart==0.0.32
+numpy==2.5.3
+soundfile==0.14.0
+soxr==1.1.0
+onnxruntime==1.31.1
+requests==2.32.5

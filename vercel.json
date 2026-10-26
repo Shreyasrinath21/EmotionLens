@@ -4,7 +4,8 @@
     "emotionlens": {
       "root": ".",
       "entrypoint": "backend.app.main:app",
-      "framework": "fastapi"
+      "framework": "fastapi",
+      "installCommand": "pip install -r vercel-requirements.txt"
     }
   },
   "rewrites": [
